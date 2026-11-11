@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Tayang Studio",
+  "productName": "Media AI Crew",
   "version": "0.0.10",
   "identifier": "app.tayang.studio",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Tayang Studio",
+        "title": "Media AI Crew",
         "width": 1280,
         "height": 800,
         "minWidth": 1024,
@@ -46,6 +46,9 @@
       "icons/icon.ico"
     ],
     "linux": {
+      "appimage": {
+        "bundleMediaFramework": true
+      },
       "deb": {
         "depends": [
           "libayatana-appindicator3-1"

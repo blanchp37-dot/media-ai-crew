@@ -1,0 +1,53 @@
+name: Steam Deck AppImage
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  appimage:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Tauri and playback dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf xdg-utils
+          sudo apt-get install -y gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-libav
+
+      - uses: pnpm/action-setup@v6.1.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri -> target
+
+      - name: Build unsigned AppImage
+        working-directory: apps/desktop
+        run: pnpm tauri build --bundles appimage --config '{"bundle":{"createUpdaterArtifacts":false}}'
+
+      - name: Verify bundled GStreamer playback files
+        run: |
+          appimage=$(find "$GITHUB_WORKSPACE/apps/desktop/src-tauri/target/release/bundle/appimage" -maxdepth 1 -name '*.AppImage' -print -quit)
+          test -n "$appimage"
+          cd "$RUNNER_TEMP"
+          "$appimage" --appimage-extract > /dev/null
+          for file in gst-plugin-scanner libgstautodetect.so libgstisomp4.so libgstlibav.so; do
+            if ! find squashfs-root -name "$file" -print -quit | grep -q .; then
+              echo "::error::AppImage is missing $file"
+              exit 1
+            fi
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Tayang-Studio-Steam-Deck
+          path: apps/desktop/src-tauri/target/release/bundle/appimage/*.AppImage
+          if-no-files-found: error

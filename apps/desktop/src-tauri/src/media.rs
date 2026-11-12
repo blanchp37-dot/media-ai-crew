@@ -34,6 +34,10 @@ impl MediaTools {
 fn command(program: impl AsRef<std::ffi::OsStr>) -> Command {
     let mut cmd = Command::new(program);
     cmd.env("PATH", crate::system::augmented_path());
+    #[cfg(target_os = "linux")]
+    if std::env::var_os("APPIMAGE").is_some() {
+        cmd.env_remove("LD_LIBRARY_PATH");
+    }
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;

@@ -71,6 +71,7 @@ export function Preview({
 }) {
   const { t } = useTranslation();
   const [videoPath, setVideoPath] = useState<string | null>(null);
+  const [localPlayback, setLocalPlayback] = useState<{ path: string; url: string } | null>(null);
   const [info, setInfo] = useState<MediaInfo | null>(null);
   const [thumbs, setThumbs] = useState<string[]>([]);
   const [frame, setFrame] = useState(0);
@@ -115,6 +116,28 @@ export function Preview({
       alive = false;
     };
   }, [load, reloadKey]);
+
+  // WebKitGTK cannot play Tauri's asset scheme directly.
+  const needsBlob = typeof navigator !== 'undefined' && /Linux/i.test(navigator.userAgent);
+  useEffect(() => {
+    if (!needsBlob || !videoPath) return;
+    const controller = new AbortController();
+    let objectUrl: string | undefined;
+    void (async () => {
+      const response = await fetch(assetUrl(videoPath), { signal: controller.signal });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const file = await response.blob();
+      if (controller.signal.aborted) return;
+      objectUrl = URL.createObjectURL(file);
+      setLocalPlayback({ path: videoPath, url: objectUrl });
+    })().catch((cause: unknown) => {
+      if (!controller.signal.aborted) setError(String(cause));
+    });
+    return () => {
+      controller.abort();
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [needsBlob, videoPath]);
 
   // A render of this project (the agent's or Tayang's) is running: say so, and show the new video once it ends.
   const run = useRender((s) => s.runs[projectId]);
@@ -168,8 +191,8 @@ export function Preview({
   };
   const toggle = () => {
     const v = videoRef.current;
-    if (!v) return;
-    if (v.paused) void v.play()?.catch(() => {});
+    if (!v || !v.getAttribute('src')) return;
+    if (v.paused) void v.play()?.catch((cause: unknown) => setError(String(cause)));
     else v.pause();
   };
 
@@ -231,7 +254,11 @@ export function Preview({
         >
           <video
             ref={videoRef}
-            src={assetUrl(videoPath)}
+            src={needsBlob ? (localPlayback?.path === videoPath ? localPlayback.url : undefined) : assetUrl(videoPath)}
+            onError={(event) => {
+              const failure = event.currentTarget.error;
+              if (failure) setError(failure.message || `Playback error (${failure.code})`);
+            }}
             className="h-full w-full object-contain"
             playsInline
             onPlay={() => setPlaying(true)}

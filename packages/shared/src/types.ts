@@ -285,10 +285,10 @@ export interface Settings {
 }
 
 /** Tayang credits, the user's own ElevenLabs or Fish Audio key, or VoiceStudio running on this computer. */
-export type VoiceSource = 'tayang' | 'elevenlabs' | 'fishaudio' | 'voicestudio';
+export type VoiceSource = 'tayang' | 'elevenlabs' | 'fishaudio' | 'fal' | 'voicestudio';
 
 /** The voice sources that speak with the user's own API key. */
-export type VoiceKeySource = 'elevenlabs' | 'fishaudio';
+export type VoiceKeySource = 'elevenlabs' | 'fishaudio' | 'fal';
 
 /** Why the user's own voice can't speak (the desktop's `VoiceError` codes). */
 export type VoiceErrorCode = 'no-key' | 'bad-key' | 'no-balance' | 'not-running' | 'too-long' | 'busy' | 'failed';
@@ -306,6 +306,7 @@ export interface VoiceCheck {
 export interface VoiceStatus {
   hasElevenKey: boolean;
   hasFishKey: boolean;
+  hasFalKey: boolean;
 }
 
 /** A provider preset: `other` is any OpenAI-compatible address the user types. */

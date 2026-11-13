@@ -26,6 +26,7 @@ impl VoiceSource {
             Self::Tayang => "Tayang",
             Self::Elevenlabs => "ElevenLabs",
             Self::Fishaudio => "Fish Audio",
+            Self::Fal => "fal.ai (ElevenLabs)",
             Self::Voicestudio => "VoiceStudio",
         }
     }
@@ -35,6 +36,7 @@ impl VoiceSource {
         match self {
             Self::Elevenlabs => Some("elevenlabs-api-key"),
             Self::Fishaudio => Some("fish-audio-api-key"),
+            Self::Fal => Some("fal-api-key"),
             Self::Tayang | Self::Voicestudio => None,
         }
     }
@@ -44,6 +46,7 @@ impl VoiceSource {
         match self {
             Self::Elevenlabs => ELEVEN_BASE,
             Self::Fishaudio => FISH_BASE,
+            Self::Fal => "https://fal.run",
             Self::Voicestudio => VOICESTUDIO_BASE,
             Self::Tayang => "",
         }
@@ -233,7 +236,7 @@ pub async fn speak(client: &reqwest::Client, setup: &VoiceSetup, text: &str, lan
         VoiceSource::Elevenlabs => eleven_speak(client, &setup.base, key, text).await,
         VoiceSource::Fishaudio => fish_speak(client, &setup.base, key, text, language).await,
         VoiceSource::Voicestudio => voicestudio_speak(client, &setup.base, text, language).await,
-        VoiceSource::Tayang => Err(VoiceError::Failed),
+        VoiceSource::Tayang | VoiceSource::Fal => Err(VoiceError::Failed),
     }
     .map_err(|e| e.refusal(name))?;
     let rel = if is_wav(&bytes) { out.with_extension("wav") } else { out.to_path_buf() };
@@ -254,6 +257,47 @@ pub async fn speak(client: &reqwest::Client, setup: &VoiceSetup, text: &str, lan
     }))
 }
 
+async fn fal_audio(client: &reqwest::Client, setup: &VoiceSetup, model: &str, body: &Value, out: &Path, folder: &Path) -> Result<Value, (u16, Value)> {
+    let failure = |status, code, message| (status, json!({ "error": code, "message": message }));
+    let failed = || failure(502, "failed", "fal.ai audio did not complete. Do not retry automatically.");
+    let key = setup.key.as_deref().filter(|k| !k.is_empty())
+        .ok_or_else(|| failure(401, "no-key", "Save a fal.ai API key in Settings › Tools › Voice."))?;
+    let res = client.post(format!("{}/{model}", setup.base))
+        .header(reqwest::header::AUTHORIZATION, format!("Key {key}"))
+        .header("x-app-fal-disable-fallback", "true")
+        .header(reqwest::header::CONTENT_TYPE, "application/json")
+        .timeout(Duration::from_secs(180))
+        .body(body.to_string())
+        .send().await.map_err(|_| failed())?;
+    match res.status().as_u16() {
+        401 | 403 => return Err(failure(401, "bad-key", "fal.ai refused the key or it lacks model access. Check Settings and do not retry automatically.")),
+        402 => return Err(failure(402, "no-balance", "The fal.ai account has insufficient credit. Do not retry automatically.")),
+        200..=299 => {}
+        _ => return Err(failed()),
+    }
+    let answer: Value = serde_json::from_slice(&res.bytes().await.map_err(|_| failed())?).map_err(|_| failed())?;
+    let url = answer.pointer("/audio/url").and_then(Value::as_str)
+        .and_then(|s| reqwest::Url::parse(s).ok())
+        .filter(|u| u.scheme() == "https" && u.host_str().is_some_and(|h| h == "fal.media" || h.ends_with(".fal.media")))
+        .ok_or_else(failed)?;
+    crate::cloud::download(client, url.as_str(), &folder.join(out), MAX_BYTES as u64)
+        .await.map_err(|_| failed())?;
+    Ok(json!({ "files": [out.to_string_lossy().replace('\\', "/")], "creditsCharged": 0, "creditsLeft": null, "provider": "fal" }))
+}
+
+pub async fn fal_speak(client: &reqwest::Client, setup: &VoiceSetup, text: &str, language: Option<&str>, voice: Option<&str>, out: &Path, folder: &Path) -> Result<Value, (u16, Value)> {
+    let mut body = json!({ "text": text, "voice": voice.unwrap_or("Adam") });
+    if let Some(language) = language {
+        body["language_code"] = json!(language);
+    }
+    fal_audio(client, setup, "fal-ai/elevenlabs/tts/multilingual-v2", &body, out, folder).await
+}
+
+pub async fn sound_effect(client: &reqwest::Client, setup: &VoiceSetup, text: &str, duration: f64, out: &Path, folder: &Path) -> Result<Value, (u16, Value)> {
+    let body = json!({ "text": text, "duration_seconds": duration });
+    fal_audio(client, setup, "fal-ai/elevenlabs/sound-effects/v2", &body, out, folder).await
+}
+
 /// `/usage` when the user's own voice is on: the same answer, plus that `/voice` costs nothing.
 pub fn usage_with_own_voice(usage: Option<Value>, source: VoiceSource) -> Value {
     let mut u = usage.unwrap_or_else(|| json!({ "signedIn": false, "credits": 0, "posts": 0 }));
@@ -267,7 +311,8 @@ pub fn usage_with_own_voice(usage: Option<Value>, source: VoiceSource) -> Value 
         "no AI credits for pictures, so build them in code"
     };
     u["ownVoice"] = json!(true);
-    u["message"] = json!(format!("The user's own voice is on ({name}): use Tayang's /voice for every voice-over, it costs no credits; {images}"));
+    u["soundEffects"] = json!(source == VoiceSource::Fal);
+    u["message"] = json!(format!("The user's own voice is on ({name}): use Tayang's /voice for every voice-over, it costs no Tayang credits; {images}"));
     u
 }
 
@@ -346,6 +391,11 @@ pub async fn key_check(client: &reqwest::Client, source: VoiceSource, base: &str
     match source {
         VoiceSource::Elevenlabs => eleven_check(client, base, key).await,
         VoiceSource::Fishaudio => fish_check(client, base, key).await,
+        // fal inference keys may lack platform API permissions. Check the key locally here;
+        // fal validates it on the first generation, so saving never spends credits.
+        VoiceSource::Fal if key.is_empty() => VoiceCheck::failed(VoiceError::NoKey),
+        VoiceSource::Fal if key.bytes().any(|b| !b.is_ascii_graphic()) => VoiceCheck::failed(VoiceError::BadKey),
+        VoiceSource::Fal => VoiceCheck { ok: true, error: None, has_credit: None },
         VoiceSource::Tayang | VoiceSource::Voicestudio => VoiceCheck::failed(VoiceError::Failed),
     }
 }

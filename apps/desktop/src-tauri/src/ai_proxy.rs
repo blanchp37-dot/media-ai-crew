@@ -27,6 +27,7 @@ const VOICE_MAX_BYTES: u64 = 60 * 1024 * 1024;
 pub enum AiJob {
     Image { prompt: String, aspect: Option<String>, count: u32, out: PathBuf },
     Voice { text: String, language: Option<String>, voice: Option<String>, out: PathBuf },
+    SoundEffect { text: String, duration: f64, out: PathBuf },
     /// `GET /usage`: the credits and auto-posts left, so the agent knows before it plans.
     Usage,
 }
@@ -287,7 +288,15 @@ pub fn parse_job(path: &str, b: &Value) -> Result<AiJob, String> {
             let t = text("text").filter(|t| !t.trim().is_empty()).ok_or("text is required")?;
             Ok(AiJob::Voice { text: t, language: text("language"), voice: text("voice"), out: out_path(b.get("out"), "voice", &["mp3"])? })
         }
-        _ => Err("Use /image or /voice".into()),
+        "/sfx" => {
+            let text = text("text").filter(|p| !p.trim().is_empty() && p.chars().count() <= 1000).ok_or("text must contain 1 to 1000 characters")?;
+            let duration = match b.get("durationSeconds") {
+                None => 2.0,
+                Some(v) => v.as_f64().filter(|n| (0.5..=22.0).contains(n)).ok_or("durationSeconds must be 0.5 to 22")?,
+            };
+            Ok(AiJob::SoundEffect { text, duration, out: out_path(b.get("out"), "sfx", &["mp3"])? })
+        }
+        _ => Err("Use /image, /voice or /sfx".into()),
     }
 }
 
@@ -372,6 +381,7 @@ pub async fn run_job(client: &reqwest::Client, base: &str, token: &str, job: AiJ
             }
             ("/v1/ai/voice", b, vec![out.clone()], VOICE_MAX_BYTES)
         }
+        AiJob::SoundEffect { .. } => return Err((400, fail("unavailable", "Sound effects require fal.ai"))),
         AiJob::Usage => unreachable!("answered above"),
     };
     let answer = send(client, reqwest::Method::POST, base, token, path, Some(&body)).await.map_err(refused)?;
@@ -382,7 +392,7 @@ pub async fn run_job(client: &reqwest::Client, base: &str, token: &str, job: AiJ
             .map(|a| a.iter().filter_map(|i| i.get("url").and_then(Value::as_str).map(str::to_string)).collect())
             .unwrap_or_default(),
         AiJob::Voice { .. } => answer.get("audioUrl").and_then(Value::as_str).map(|u| vec![u.to_string()]).unwrap_or_default(),
-        AiJob::Usage => Vec::new(),
+        AiJob::SoundEffect { .. } | AiJob::Usage => Vec::new(),
     };
     if urls.is_empty() {
         return Err(refused(CloudError::Provider));

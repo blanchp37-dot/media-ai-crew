@@ -35,7 +35,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   plan.signedIn = true;
   plan.status = { active: true, plan: 'creator' };
-  vi.mocked(ipc.voiceStatus).mockResolvedValue({ hasElevenKey: false, hasFishKey: false });
+  vi.mocked(ipc.voiceStatus).mockResolvedValue({ hasElevenKey: false, hasFishKey: false, hasFalKey: false });
   vi.mocked(ipc.updateSettings).mockImplementation(async (patch) => ({ ...base, ...patch }) as Settings);
 });
 
@@ -48,7 +48,7 @@ describe('VoiceSourceCard', () => {
 
     await user.click(screen.getByRole('button', { name: 'Voice source: Tayang' }));
     const items = await screen.findAllByRole('menuitem');
-    expect(items.map((i) => i.textContent)).toEqual(['Tayang', 'ElevenLabsNeeds an API key', 'Fish AudioNeeds an API key', 'VoiceStudio']);
+    expect(items.map((i) => i.textContent)).toEqual(['Tayang', 'ElevenLabsNeeds an API key', 'fal.ai (ElevenLabs)Needs an API key', 'Fish AudioNeeds an API key', 'VoiceStudio']);
     // Only the one in use carries the check.
     expect(within(items[0]!).getByTestId('voice-check')).toBeTruthy();
     expect(screen.getAllByTestId('voice-check')).toHaveLength(1);
@@ -121,7 +121,7 @@ describe('VoiceSourceCard', () => {
   });
 
   it('a saved key switches to Fish Audio in one pick, and can be removed', async () => {
-    vi.mocked(ipc.voiceStatus).mockResolvedValue({ hasElevenKey: false, hasFishKey: true });
+    vi.mocked(ipc.voiceStatus).mockResolvedValue({ hasElevenKey: false, hasFishKey: true, hasFalKey: false });
     vi.mocked(ipc.voiceKeyClear).mockResolvedValue(base);
     const onSaved = vi.fn();
     const { rerender } = render(<VoiceSourceCard settings={base} onSaved={onSaved} />);

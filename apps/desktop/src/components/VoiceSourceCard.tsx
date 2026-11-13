@@ -22,14 +22,16 @@ const VOICESTUDIO_URL = 'https://voicestudio.sh';
 const SOURCES: { id: VoiceSource; name: string; logo: string }[] = [
   { id: 'tayang', name: 'Tayang', logo: tayang },
   { id: 'elevenlabs', name: 'ElevenLabs', logo: elevenlabs },
+  { id: 'fal', name: 'fal.ai (ElevenLabs)', logo: elevenlabs },
   { id: 'fishaudio', name: 'Fish Audio', logo: fishaudio },
   { id: 'voicestudio', name: 'VoiceStudio', logo: voicestudio },
 ];
 const KEYS_URL: Record<VoiceKeySource, string> = {
   elevenlabs: 'https://elevenlabs.io/app/settings/api-keys',
+  fal: 'https://fal.ai/dashboard/keys',
   fishaudio: 'https://fish.audio/app/api-keys',
 };
-const isKeySource = (s: VoiceSource): s is VoiceKeySource => s === 'elevenlabs' || s === 'fishaudio';
+const isKeySource = (s: VoiceSource): s is VoiceKeySource => s === 'elevenlabs' || s === 'fishaudio' || s === 'fal';
 const sourceOf = (id: VoiceSource) => SOURCES.find((s) => s.id === id) ?? SOURCES[0]!;
 
 type ErrorKey = 'noKey' | 'badKey' | 'noBalance' | 'notRunning' | 'busy' | 'failed';
@@ -171,7 +173,7 @@ function KeyPanel({ source, active, inUse, hasKey, onHasKey, onSaved }: {
           )}
         </div>
       </div>
-      {connected && <Status ok>{connected}</Status>}
+      {connected && <Status ok>{source === 'fal' ? t('voice.keySaved') : connected}</Status>}
       {check?.ok && !connected && <Status ok={false}>{t('voice.errors.noBalance', { name })}</Status>}
       {check && !check.ok && <Status ok={false}>{t(`voice.errors.${ERROR_KEY[check.error ?? 'failed']}`, { name })}</Status>}
       {!check && !active && !hasKey && <span className="text-xs text-text-3">{t('voice.notYet', { name: inUse })}</span>}
@@ -190,12 +192,12 @@ export function VoiceSourceCard({ settings, onSaved }: { settings: Settings; onS
   /** A source with a key that was picked to set up its key: its panel is open even while another source is in use. */
   const [setup, setSetup] = useState<VoiceKeySource | null>(null);
   const shown: VoiceSource = setup ?? active;
-  const [hasKey, setHasKey] = useState<Record<VoiceKeySource, boolean>>({ elevenlabs: false, fishaudio: false });
+  const [hasKey, setHasKey] = useState<Record<VoiceKeySource, boolean>>({ elevenlabs: false, fishaudio: false, fal: false });
   const [studio, setStudio] = useState<VoiceCheck | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    voiceStatus().then((s) => setHasKey({ elevenlabs: s.hasElevenKey, fishaudio: s.hasFishKey }), () => {});
+    voiceStatus().then((s) => setHasKey({ elevenlabs: s.hasElevenKey, fishaudio: s.hasFishKey, fal: s.hasFalKey }), () => {});
   }, []);
 
   const checkStudio = () => {

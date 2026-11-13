@@ -1035,15 +1035,30 @@ pub async fn start_ai_proxy(handle: AppHandle) {
             let token = auth.token(&base).await;
             // The user's own voice (Settings › Video) speaks instead of Tayang's, signed in or not.
             let settings = state.db.get_settings(&state.home);
+            if let crate::ai_proxy::AiJob::SoundEffect { text, duration, out } = &job {
+                let source = crate::types::VoiceSource::Fal;
+                if settings.voice_source != source {
+                    return Err((403, serde_json::json!({ "error": "unavailable", "message": "Select fal.ai in Settings to generate sound effects" })));
+                }
+                let key = match handle.try_state::<ApiKeys>() {
+                    Some(keys) => keys.get_account("fal-api-key").await.ok().flatten(),
+                    None => None,
+                };
+                let setup = crate::voice::VoiceSetup { source, key, base: source.base().into() };
+                return crate::voice::sound_effect(auth.client(), &setup, text, *duration, out, &folder).await;
+            }
             let own_voice = settings.voice_source != crate::types::VoiceSource::Tayang;
             if own_voice {
-                if let crate::ai_proxy::AiJob::Voice { text, language, out, .. } = &job {
+                if let crate::ai_proxy::AiJob::Voice { text, language, voice, out } = &job {
                     let source = settings.voice_source;
                     let key = match (source.key_account(), handle.try_state::<ApiKeys>()) {
                         (Some(account), Some(keys)) => keys.get_account(account).await.ok().flatten(),
                         _ => None,
                     };
                     let setup = crate::voice::VoiceSetup { source, key, base: source.base().into() };
+                    if source == crate::types::VoiceSource::Fal {
+                        return crate::voice::fal_speak(auth.client(), &setup, text, language.as_deref(), voice.as_deref(), out, &folder).await;
+                    }
                     return crate::voice::speak(auth.client(), &setup, text, language.as_deref(), out, &folder).await;
                 }
                 if job == crate::ai_proxy::AiJob::Usage {
@@ -2241,23 +2256,30 @@ impl ApiKeys {
 pub struct VoiceStatus {
     has_eleven_key: bool,
     has_fish_key: bool,
+    has_fal_key: bool,
 }
 
 /// The keychain account of a source that has an API key, and its name in Settings.
 fn voice_key_source(source: crate::types::VoiceSource) -> CmdResult<(&'static str, &'static str)> {
     let account = source.key_account().ok_or("That voice source has no API key")?;
-    Ok((account, if source == crate::types::VoiceSource::Elevenlabs { "elevenlabs" } else { "fishaudio" }))
+    let name = match source {
+        crate::types::VoiceSource::Elevenlabs => "elevenlabs",
+        crate::types::VoiceSource::Fishaudio => "fishaudio",
+        crate::types::VoiceSource::Fal => "fal",
+        _ => return Err("That voice source has no API key".into()),
+    };
+    Ok((account, name))
 }
 
 #[tauri::command]
 pub async fn voice_status(keys: State<'_, ApiKeys>) -> CmdResult<VoiceStatus> {
-    let mut saved = [false, false];
-    for (i, source) in [crate::types::VoiceSource::Elevenlabs, crate::types::VoiceSource::Fishaudio].into_iter().enumerate() {
+    let mut saved = [false; 3];
+    for (i, source) in [crate::types::VoiceSource::Elevenlabs, crate::types::VoiceSource::Fishaudio, crate::types::VoiceSource::Fal].into_iter().enumerate() {
         if let Some(account) = source.key_account() {
             saved[i] = keys.get_account(account).await.ok().flatten().is_some_and(|k| !k.is_empty());
         }
     }
-    Ok(VoiceStatus { has_eleven_key: saved[0], has_fish_key: saved[1] })
+    Ok(VoiceStatus { has_eleven_key: saved[0], has_fish_key: saved[1], has_fal_key: saved[2] })
 }
 
 /// Checks the source's API key (no `key`: the saved one) and, when it is good, saves it and makes

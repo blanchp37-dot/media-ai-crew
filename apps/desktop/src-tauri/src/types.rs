@@ -429,6 +429,7 @@ pub enum VoiceSource {
     Tayang,
     Elevenlabs,
     Fishaudio,
+    Fal,
     Voicestudio,
 }
 

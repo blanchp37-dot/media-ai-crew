@@ -290,7 +290,7 @@ pub async fn fal_speak(client: &reqwest::Client, setup: &VoiceSetup, text: &str,
     if let Some(language) = language {
         body["language_code"] = json!(language);
     }
-    fal_audio(client, setup, "fal-ai/elevenlabs/tts/multilingual-v2", &body, out, folder).await
+    fal_audio(client, setup, "elevenlabs/tts/eleven-v4-turbo", &body, out, folder).await
 }
 
 pub async fn sound_effect(client: &reqwest::Client, setup: &VoiceSetup, text: &str, duration: f64, out: &Path, folder: &Path) -> Result<Value, (u16, Value)> {

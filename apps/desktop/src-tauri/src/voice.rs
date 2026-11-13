@@ -295,7 +295,7 @@ pub async fn fal_speak(client: &reqwest::Client, setup: &VoiceSetup, text: &str,
 
 pub async fn sound_effect(client: &reqwest::Client, setup: &VoiceSetup, text: &str, duration: f64, out: &Path, folder: &Path) -> Result<Value, (u16, Value)> {
     let body = json!({ "text": text, "duration_seconds": duration });
-    fal_audio(client, setup, "fal-ai/elevenlabs/sound-effects/v2", &body, out, folder).await
+    fal_audio(client, setup, "elevenlabs/sound-effects/v3", &body, out, folder).await
 }
 
 /// `/usage` when the user's own voice is on: the same answer, plus that `/voice` costs nothing.

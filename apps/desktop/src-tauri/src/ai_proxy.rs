@@ -289,10 +289,10 @@ pub fn parse_job(path: &str, b: &Value) -> Result<AiJob, String> {
             Ok(AiJob::Voice { text: t, language: text("language"), voice: text("voice"), out: out_path(b.get("out"), "voice", &["mp3"])? })
         }
         "/sfx" => {
-            let text = text("text").filter(|p| !p.trim().is_empty() && p.chars().count() <= 1000).ok_or("text must contain 1 to 1000 characters")?;
+            let text = text("text").filter(|p| !p.trim().is_empty() && p.chars().count() <= 450).ok_or("text must contain 1 to 450 characters")?;
             let duration = match b.get("durationSeconds") {
                 None => 2.0,
-                Some(v) => v.as_f64().filter(|n| (0.5..=22.0).contains(n)).ok_or("durationSeconds must be 0.5 to 22")?,
+                Some(v) => v.as_f64().filter(|n| (0.5..=30.0).contains(n)).ok_or("durationSeconds must be 0.5 to 30")?,
             };
             Ok(AiJob::SoundEffect { text, duration, out: out_path(b.get("out"), "sfx", &["mp3"])? })
         }

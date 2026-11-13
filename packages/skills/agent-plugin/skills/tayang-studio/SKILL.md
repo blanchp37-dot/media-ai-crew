@@ -48,19 +48,19 @@ When a video is finished, and whenever the user asks for a post, write `post.jso
 
 ## AI images and voice
 
-Tayang makes AI images and voice-overs with the user's Tayang credits. Every session has `$TAYANG_AI_URL` and `$TAYANG_AI_TOKEN`.
+Tayang makes AI images and voice-overs with the user's Tayang credits. If usage reports `"imageProvider": "fal"`, use `/image` only for requested AI visual assets, regardless of Tayang sign-in or credits. fal.ai bills each image. Every session has `$TAYANG_AI_URL` and `$TAYANG_AI_TOKEN`.
 
 1. When you plan a video (not when you only suggest topics), check the credits: `curl -s "$TAYANG_AI_URL/usage" -H "Authorization: Bearer $TAYANG_AI_TOKEN"`. It answers like `{"signedIn":true,"credits":28,"imagesAffordable":28,"voiceMinutesAffordable":4,"posts":5}`.
 2. With enough credits, Tayang's API is the source for these:
    - A voice-over comes from `/voice`, not another text-to-speech (macOS `say`, edge-tts, Piper, a pipeline's own TTS, an API key of your own).
    - A picture you can't build in code (an illustrated scene, a character, a background, a texture) comes from `/image`, not stock photos, other image generators or images from the web.
-3. When `/usage` says `"ownVoice": true`, the user set up their own voice (Fish Audio or VoiceStudio): every voice-over comes from `/voice` whatever the credits, and it costs no Tayang credits. If usage reports `"soundEffects": true`, use `POST /sfx` with the same authorization and a JSON body with `text`, optional `durationSeconds` (0.5–30), and `out` (e.g. `audio/effect.mp3`) when the user requests AI SFX. With fal.ai, Eleven v4 Turbo accepts sparse delivery tags such as [excited] or [whispering] in the narration text. Keep them out of captions. fal.ai bills voice and SFX separately. Keep effects below narration and never retry paid requests automatically. Pictures still follow rules 2 and 4. If `/voice` answers an error, do what its `message` says.
-4. Without enough credits (or signed out), and no own voice, make the video the way you would without Tayang: a free voice such as the system's text-to-speech, and pictures built in code. Tell the user once, in one short line, that Tayang's AI voice and images come with credits (Settings › Account has the plans and a gift code field). Never drop the voice-over because of credits.
+3. When `/usage` says `"ownVoice": true`, the user set up their own voice (Fish Audio or VoiceStudio): every voice-over comes from `/voice` whatever the credits, and it costs no Tayang credits. If usage reports `"soundEffects": true`, use `POST /sfx` with the same authorization and a JSON body with `text`, optional `durationSeconds` (0.5–30), and `out` (e.g. `audio/effect.mp3`) when the user requests AI SFX. With fal.ai, Eleven v4 Turbo accepts sparse delivery tags such as [excited] or [whispering] in the narration text. Keep them out of captions. fal.ai bills voice and SFX separately. Keep effects below narration and never retry paid requests automatically. For images, follow the provider reported by /usage. If `/voice` answers an error, do what its `message` says.
+4. When neither Tayang credits nor an external provider is available for an asset, use the corresponding fallback: a free voice such as the system's text-to-speech, and pictures built in code. Tell the user once, in one short line, that Tayang's AI voice and images come with credits (Settings › Account has the plans and a gift code field). Never drop the voice-over because of credits.
 5. The user's wishes come first: no voice-over only when they asked for none, and no images where shapes and type do the job. Text, charts and maps are always built in code.
 
 The two calls:
 
-- Image (1 credit each): `curl -s -X POST "$TAYANG_AI_URL/image" -H "Authorization: Bearer $TAYANG_AI_TOKEN" -d '{"prompt":"<what to draw, in English>","aspect":"9:16","out":"assets/<name>.jpg"}'`. `aspect` is 9:16, 16:9 or 1:1; `"count"` makes up to 4 (`<name>-2.jpg`…).
+- Image (1 Tayang credit each with Tayang, or pay per image with fal.ai): `curl -s -X POST "$TAYANG_AI_URL/image" -H "Authorization: Bearer $TAYANG_AI_TOKEN" -d '{"prompt":"<what to draw, in English>","aspect":"9:16","out":"assets/<name>.jpg"}'`. `aspect` is 9:16, 16:9 or 1:1; `"count"` makes up to 4 (`<name>-2.jpg`…).
 - Voice (about 7 credits a minute): `curl -s -X POST "$TAYANG_AI_URL/voice" -H "Authorization: Bearer $TAYANG_AI_TOKEN" -d '{"text":"<the narration>","language":"id","out":"audio/<name>.mp3"}'`.
 
 The answer lists the saved files (inside your folder) and `creditsLeft`. If it is an error (`signed-out`, `plan-required`, `quota-exceeded`), finish the video without that asset and say so once, in one short line.

@@ -257,9 +257,9 @@ pub async fn speak(client: &reqwest::Client, setup: &VoiceSetup, text: &str, lan
     }))
 }
 
-async fn fal_audio(client: &reqwest::Client, setup: &VoiceSetup, model: &str, body: &Value, out: &Path, folder: &Path) -> Result<Value, (u16, Value)> {
+async fn fal_generate(client: &reqwest::Client, setup: &VoiceSetup, model: &str, body: &Value) -> Result<Value, (u16, Value)> {
     let failure = |status, code, message| (status, json!({ "error": code, "message": message }));
-    let failed = || failure(502, "failed", "fal.ai audio did not complete. Do not retry automatically.");
+    let failed = || failure(502, "failed", "fal.ai generation did not complete. Do not retry automatically.");
     let key = setup.key.as_deref().filter(|k| !k.is_empty())
         .ok_or_else(|| failure(401, "no-key", "Save a fal.ai API key in Settings › Tools › Voice."))?;
     let res = client.post(format!("{}/{model}", setup.base))
@@ -275,13 +275,25 @@ async fn fal_audio(client: &reqwest::Client, setup: &VoiceSetup, model: &str, bo
         200..=299 => {}
         _ => return Err(failed()),
     }
-    let answer: Value = serde_json::from_slice(&res.bytes().await.map_err(|_| failed())?).map_err(|_| failed())?;
-    let url = answer.pointer("/audio/url").and_then(Value::as_str)
+    serde_json::from_slice(&res.bytes().await.map_err(|_| failed())?).map_err(|_| failed())
+}
+
+fn fal_download_error() -> (u16, Value) {
+    (502, json!({ "error": "failed", "message": "Could not save the fal.ai output. Do not retry generation automatically." }))
+}
+
+fn fal_media_url(value: Option<&Value>) -> Result<reqwest::Url, (u16, Value)> {
+    value.and_then(Value::as_str)
         .and_then(|s| reqwest::Url::parse(s).ok())
         .filter(|u| u.scheme() == "https" && u.host_str().is_some_and(|h| h == "fal.media" || h.ends_with(".fal.media")))
-        .ok_or_else(failed)?;
+        .ok_or_else(fal_download_error)
+}
+
+async fn fal_audio(client: &reqwest::Client, setup: &VoiceSetup, model: &str, body: &Value, out: &Path, folder: &Path) -> Result<Value, (u16, Value)> {
+    let answer = fal_generate(client, setup, model, body).await?;
+    let url = fal_media_url(answer.pointer("/audio/url"))?;
     crate::cloud::download(client, url.as_str(), &folder.join(out), MAX_BYTES as u64)
-        .await.map_err(|_| failed())?;
+        .await.map_err(|_| fal_download_error())?;
     Ok(json!({ "files": [out.to_string_lossy().replace('\\', "/")], "creditsCharged": 0, "creditsLeft": null, "provider": "fal" }))
 }
 
@@ -298,6 +310,35 @@ pub async fn sound_effect(client: &reqwest::Client, setup: &VoiceSetup, text: &s
     fal_audio(client, setup, "elevenlabs/sound-effects/v3", &body, out, folder).await
 }
 
+/// Generates a batch in one paid request, using dimensions under one billed megapixel.
+pub async fn fal_images(client: &reqwest::Client, setup: &VoiceSetup, job: &crate::ai_proxy::AiJob, folder: &Path) -> Result<Value, (u16, Value)> {
+    let crate::ai_proxy::AiJob::Image { prompt, aspect, count, out } = job else {
+        return Err(fal_download_error());
+    };
+    let (width, height) = match aspect.as_deref().unwrap_or("9:16") {
+        "9:16" => (720, 1280),
+        "16:9" => (1280, 720),
+        "1:1" => (960, 960),
+        _ => return Err((400, json!({ "error": "invalid", "message": "Use aspect 9:16, 16:9 or 1:1" }))),
+    };
+    let body = json!({
+        "prompt": prompt, "num_images": count, "output_format": "jpeg",
+        "image_size": { "width": width, "height": height },
+    });
+    let answer = fal_generate(client, setup, "fal-ai/flux/schnell", &body).await?;
+    let images = answer.get("images").and_then(Value::as_array)
+        .filter(|images| images.len() == *count as usize).ok_or_else(fal_download_error)?;
+    let urls = images.iter().map(|image| fal_media_url(image.get("url"))).collect::<Result<Vec<_>, _>>()?;
+    let mut files = Vec::with_capacity(urls.len());
+    for (i, url) in urls.into_iter().enumerate() {
+        let path = crate::ai_proxy::nth_path(out, i);
+        crate::cloud::download(client, url.as_str(), &folder.join(&path), 25 * 1024 * 1024)
+            .await.map_err(|_| fal_download_error())?;
+        files.push(path.to_string_lossy().replace('\\', "/"));
+    }
+    Ok(json!({ "files": files, "creditsCharged": 0, "creditsLeft": null, "provider": "fal" }))
+}
+
 /// `/usage` when the user's own voice is on: the same answer, plus that `/voice` costs nothing.
 pub fn usage_with_own_voice(usage: Option<Value>, source: VoiceSource) -> Value {
     let mut u = usage.unwrap_or_else(|| json!({ "signedIn": false, "credits": 0, "posts": 0 }));
@@ -305,12 +346,17 @@ pub fn usage_with_own_voice(usage: Option<Value>, source: VoiceSource) -> Value 
         VoiceSource::Voicestudio => "VoiceStudio on this computer".to_string(),
         other => format!("their {} account", other.name()),
     };
-    let images = if u.get("credits").and_then(Value::as_i64).unwrap_or(0) > 0 {
+    let images = if source == VoiceSource::Fal {
+        "use /image for requested AI images (FLUX.1 Schnell, billed by fal.ai)"
+    } else if u.get("credits").and_then(Value::as_i64).unwrap_or(0) > 0 {
         "Tayang's /image for AI pictures"
     } else {
         "no AI credits for pictures, so build them in code"
     };
     u["ownVoice"] = json!(true);
+    if source == VoiceSource::Fal {
+        u["imageProvider"] = json!("fal");
+    }
     u["soundEffects"] = json!(source == VoiceSource::Fal);
     u["message"] = json!(format!("The user's own voice is on ({name}): use Tayang's /voice for every voice-over, it costs no Tayang credits; {images}"));
     u

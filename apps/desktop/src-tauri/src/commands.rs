@@ -1035,6 +1035,15 @@ pub async fn start_ai_proxy(handle: AppHandle) {
             let token = auth.token(&base).await;
             // The user's own voice (Settings › Video) speaks instead of Tayang's, signed in or not.
             let settings = state.db.get_settings(&state.home);
+            if settings.voice_source == crate::types::VoiceSource::Fal && matches!(&job, crate::ai_proxy::AiJob::Image { .. }) {
+                let source = settings.voice_source;
+                let key = match (source.key_account(), handle.try_state::<ApiKeys>()) {
+                    (Some(account), Some(keys)) => keys.get_account(account).await.ok().flatten(),
+                    _ => None,
+                };
+                let setup = crate::voice::VoiceSetup { source, key, base: source.base().into() };
+                return crate::voice::fal_images(auth.client(), &setup, &job, &folder).await;
+            }
             if let crate::ai_proxy::AiJob::SoundEffect { text, duration, out } = &job {
                 let source = crate::types::VoiceSource::Fal;
                 if settings.voice_source != source {

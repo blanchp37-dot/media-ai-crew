@@ -434,6 +434,11 @@ fn spawn_agent(command: &[String], cwd: &Path, env: &[(String, String)]) -> Resu
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true);
+    // Keep AppImage libraries in the UI process so host agent tools load host libraries.
+    #[cfg(target_os = "linux")]
+    if std::env::var_os("APPIMAGE").is_some() {
+        cmd.env_remove("LD_LIBRARY_PATH");
+    }
     // Own process group, so stopping also reaches helpers such as the
     // package an `npx` launcher starts.
     #[cfg(unix)]

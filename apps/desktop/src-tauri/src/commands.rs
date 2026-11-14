@@ -1066,7 +1066,9 @@ pub async fn start_ai_proxy(handle: AppHandle) {
                     };
                     let setup = crate::voice::VoiceSetup { source, key, base: source.base().into() };
                     if source == crate::types::VoiceSource::Fal {
-                        return crate::voice::fal_speak(auth.client(), &setup, text, language.as_deref(), voice.as_deref(), out, &folder).await;
+                        let selected_voice = voice.as_deref().map(str::trim).filter(|v| !v.is_empty())
+                            .unwrap_or_else(|| settings.fal_voice.name());
+                        return crate::voice::fal_speak(auth.client(), &setup, text, language.as_deref(), selected_voice, out, &folder).await;
                     }
                     return crate::voice::speak(auth.client(), &setup, text, language.as_deref(), out, &folder).await;
                 }

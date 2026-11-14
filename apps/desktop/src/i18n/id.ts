@@ -1200,6 +1200,7 @@ export const id: Translations = {
     title: 'Suara',
     needsKey: 'Perlu API key',
     source: 'Sumber suara',
+    falDefaultVoice: 'Suara default fal.ai',
     sourceHint: 'Siapa yang mengisi voiceover videomu',
     tayangText: 'Voiceover dibuat dengan kredit Tayang-mu, sekitar 7 kredit per menit.',
     tayangNoPlan: 'Suara Tayang ada di paket {{plan}} ke atas. Tanpa paket, videomu memakai suara gratis dari komputer ini.',

@@ -40,6 +40,19 @@ beforeEach(() => {
 });
 
 describe('VoiceSourceCard', () => {
+  it('saves the default fal.ai voice and displays the saved choice', async () => {
+    const fal = withSource('fal');
+    const onSaved = vi.fn();
+    const { rerender } = render(<VoiceSourceCard settings={fal} onSaved={onSaved} />);
+    const selector = screen.getByRole('combobox', { name: 'Default fal.ai voice' });
+    expect((selector as HTMLSelectElement).value).toBe('Adam');
+    await userEvent.setup().selectOptions(selector, 'Aria');
+    await waitFor(() => expect(ipc.updateSettings).toHaveBeenCalledWith({ falVoice: 'Aria' }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+    rerender(<VoiceSourceCard settings={{ ...fal, falVoice: 'Aria' }} onSaved={onSaved} />);
+    expect((selector as HTMLSelectElement).value).toBe('Aria');
+  });
+
   it('shows the source in use on the button, and marks it in the menu', async () => {
     render(<VoiceSourceCard settings={base} onSaved={() => {}} />);
     const user = userEvent.setup();

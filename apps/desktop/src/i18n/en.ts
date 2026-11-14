@@ -1206,6 +1206,7 @@ export const en = {
     title: 'Voice',
     needsKey: 'Needs an API key',
     source: 'Voice source',
+    falDefaultVoice: 'Default fal.ai voice',
     sourceHint: 'Who speaks the voiceover in your videos',
     tayangText: 'Voiceovers are made with your Tayang credits, about 7 credits a minute.',
     tayangNoPlan: "Tayang's voice comes with the {{plan}} plan and above. Without a plan, your videos use a free voice from this computer.",

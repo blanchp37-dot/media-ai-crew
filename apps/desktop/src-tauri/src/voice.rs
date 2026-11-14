@@ -297,8 +297,8 @@ async fn fal_audio(client: &reqwest::Client, setup: &VoiceSetup, model: &str, bo
     Ok(json!({ "files": [out.to_string_lossy().replace('\\', "/")], "creditsCharged": 0, "creditsLeft": null, "provider": "fal" }))
 }
 
-pub async fn fal_speak(client: &reqwest::Client, setup: &VoiceSetup, text: &str, language: Option<&str>, voice: Option<&str>, out: &Path, folder: &Path) -> Result<Value, (u16, Value)> {
-    let mut body = json!({ "text": text, "voice": voice.unwrap_or("Adam") });
+pub async fn fal_speak(client: &reqwest::Client, setup: &VoiceSetup, text: &str, language: Option<&str>, voice: &str, out: &Path, folder: &Path) -> Result<Value, (u16, Value)> {
+    let mut body = json!({ "text": text, "voice": voice });
     if let Some(language) = language {
         body["language_code"] = json!(language);
     }

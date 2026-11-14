@@ -282,6 +282,7 @@ export interface Settings {
   apiProvider?: ApiProvider | null;
   /** Where voice-overs come from; missing: Tayang credits. API keys stay in the keychain. */
   voiceSource?: VoiceSource;
+  falVoice?: 'Adam' | 'Aria';
 }
 
 /** Tayang credits, the user's own ElevenLabs or Fish Audio key, or VoiceStudio running on this computer. */

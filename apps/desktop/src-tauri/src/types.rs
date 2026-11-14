@@ -433,6 +433,22 @@ pub enum VoiceSource {
     Voicestudio,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum FalVoice {
+    #[default]
+    Adam,
+    Aria,
+}
+
+impl FalVoice {
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Adam => "Adam",
+            Self::Aria => "Aria",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
@@ -482,6 +498,8 @@ pub struct Settings {
     /// Where voice-overs come from. API keys are in the keychain.
     #[serde(default)]
     pub voice_source: VoiceSource,
+    #[serde(default)]
+    pub fal_voice: FalVoice,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

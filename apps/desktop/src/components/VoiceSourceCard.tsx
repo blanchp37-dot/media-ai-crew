@@ -224,6 +224,19 @@ export function VoiceSourceCard({ settings, onSaved }: { settings: Settings; onS
     }
   };
 
+  const [savingVoice, setSavingVoice] = useState(false);
+  const saveFalVoice = async (falVoice: 'Adam' | 'Aria') => {
+    setError(null);
+    setSavingVoice(true);
+    try {
+      onSaved(await updateSettings({ falVoice }));
+    } catch (e) {
+      setError(t('settings.saveError', { message: e instanceof Error ? e.message : String(e) }));
+    } finally {
+      setSavingVoice(false);
+    }
+  };
+
   const label = t('voice.source');
   // The button follows what was picked; a source still waiting for its key says so.
   const current = sourceOf(shown);
@@ -278,6 +291,21 @@ export function VoiceSourceCard({ settings, onSaved }: { settings: Settings; onS
             onHasKey={(has) => setHasKey((k) => ({ ...k, [shown]: has }))}
             onSaved={onSaved}
           />
+        )}
+
+        {shown === 'fal' && active === 'fal' && (
+          <label className="flex flex-wrap items-center justify-between gap-2 text-[13px]">
+            {t('voice.falDefaultVoice')}
+            <select
+              className="h-9 rounded-md border border-hairline bg-background px-3 text-foreground"
+              value={settings.falVoice ?? 'Adam'}
+              disabled={savingVoice}
+              onChange={(e) => void saveFalVoice(e.currentTarget.value === 'Aria' ? 'Aria' : 'Adam')}
+            >
+              <option value="Adam">Adam</option>
+              <option value="Aria">Aria</option>
+            </select>
+          </label>
         )}
 
         {shown === 'voicestudio' && (
